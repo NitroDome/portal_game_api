@@ -11,7 +11,7 @@ router.post(
     gameController.assignWalletToUser
 );
 router.get("/getContracts/:level", gameController.getContracts);
-router.post("/getUserNFTs/:levelID/:walletAddress", gameController.getUserNFTs);
+router.post("/getNFTMap/:levelID", gameController.getNFTMap);
 router.get(
     "/getUserInventory/:levelID/:walletAddress",
     gameController.getUserInventory
