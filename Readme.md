@@ -6,22 +6,46 @@ Welcome to the Portal Game API, the central hub for interfacing between user int
 
 Quick access to the API endpoints using mock data for initial testing:
 
--   **Retrieve Games and Levels**
-    -   `GET [http://localhost:3000/api/getGames](http://localhost:3000/api/getGames)`
 -   **Check Wallet Connection**
-    -   `GET [http://localhost:3000/api/isWalletConnected/1/0x123456789abcdef](http://localhost:3000/api/isWalletConnected/1/0x123456789abcdef)`
--   **Retrieve User NFTs**
-    -   `GET [http://localhost:3000/api/getUserNFTs/1/1/0xABC123DEF](http://localhost:3000/api/getUserNFTs/1/1/0xABC123DEF)`
+    -   `GET [http://localhost:3001/api/game/isWalletConnected/0xABCDEF123456](http://localhost:3001/api/game/isWalletConnected/0xABCDEF123456)`
+-   **Assign Wallet to User**
+    -   Use a tool like Postman to make a `PUT` request to:
+        -   `[http://localhost:3001/api/game/assignWalletToUser/0xDEF456ABC789](http://localhost:3001/api/game/assignWalletToUser/0xDEF456ABC789)`
+    -   Request body:
+        ```json
+        {
+            "username": 3jn3n3j33j,
+            "password": 8432423122321321
+        }
+        ```
+-   **Retrieve Contracts**
+    -   `GET [http://localhost:3001/api/game/getContracts/2](http://localhost:3001/api/game/getContracts/2)`
+-   **Get NFT Mapping**
+    -   Use a tool like Postman to make a `POST` request to:
+        -   `POST [http://localhost:3001/api/game/getNftMap/1](http://localhost:3001/api/game/getNftMap/1)`
+    -   Request body:
+        ```json
+        [
+            {
+                “nftType”: 7,
+                “tokenId”: 10,
+                “contract”: “0x121313123113”,
+                “chain”: “BASE”
+            },
+        ]
+        ```
 -   **Retrieve User Inventory**
-    -   `GET [http://localhost:3000/api/getUserInventory/1/1/0xABC123DEF](http://localhost:3000/api/getUserInventory/1/1/0xABC123DEF)`
--   **Retrieve Portal Transaction History**
-    -   `GET [http://localhost:3000/api/getTransactions/0x123ABC456DEF](http://localhost:3000/api/getTransactions/0x123ABC456DEF)`
--   **Submit Portal Transactions**
+    -   `GET [http://localhost:3000/api/getUserInventory/1/0xABC123DEF](http://localhost:3000/api/getUserInventory/1/0xABC123DEF)`
+-   **Finalize Portal Transaction**
     -   Use a tool like Postman to make a `PUT` request to:
-        -   `[http://localhost:3000/api/submitPortalTransaction/1/0xABC123DEF](http://localhost:3000/api/submitPortalTransaction/1/0xABC123DEF)`
--   **Cancel Portal Transaction**
-    -   Use a tool like Postman to make a `PUT` request to:
-        -   `[http://localhost:3000/api/cancelPortalTransaction/123](http://localhost:3000/api/cancelPortalTransaction/123)`
+        -   `[http://localhost:3000/api/game/finalizePortalTransaction/1/0xDEF456ABC789](http://localhost:3000/api/game/finalizePortalTransaction/1/0xDEF456ABC789)`
+    -   Request body:
+        ```json
+        {
+            "extract"“extract”: [3,17,42],
+            “inject”: [302, 15]
+        }
+        ```
 
 ## Overviews
 

@@ -50,12 +50,14 @@ exports.assignWalletToUser = (req, res) => {
 
 /**
  * Retrieves contract addresses related to a specific game level that have mappings to game assets.
- * @param {Request} req - The request object. Expects levelID in the URL.
+ * @param {Request} req - The request object. Expects levelId in the URL.
  * @param {Response} res - The response object. Returns an array of contract objects.
  */
 exports.getContracts = (req, res) => {
-    const { levelID } = req.params;
-    const levelNumber = parseInt(levelID);
+    console.log("getContracts");
+    const { levelId } = req.params;
+    const levelNumber = parseInt(levelId);
+    console.log("levelNumber", levelNumber);
     const contractsForLevel = gameContracts.find(
         (item) => item.level === levelNumber
     );
@@ -77,16 +79,16 @@ exports.getContracts = (req, res) => {
 
 /**
  * Retrieves NFTs for a game level that are mapped to allowed game assets.
- * @param {Request} req - The request object, includes levelID in the URL, and expected NFT details in the body.
+ * @param {Request} req - The request object, includes levelId in the URL, and expected NFT details in the body.
  * @param {Response} res - The response object, returns an array of allowed NFTs.
  */
 exports.getNFTMap = (req, res) => {
     console.log("getNFTMap");
-    const { levelID } = req.params;
+    const { levelId } = req.params;
     const nftDetails = req.body; // Array of { nftType, tokenId, contract, chain }
-    const levelNumber = parseInt(levelID);
+    const levelNumber = parseInt(levelId);
     const levelNFTMappings = gameNFTMappings.find(
-        (mapping) => mapping.levelID === levelNumber
+        (mapping) => mapping.levelId === levelNumber
     );
 
     if (!levelNFTMappings) {
@@ -113,16 +115,16 @@ exports.getNFTMap = (req, res) => {
 
 /**
  * Retrieves the user's inventory for a specific game level.
- * @param {Request} req - The request object, includes levelID and walletAddress in the URL.
+ * @param {Request} req - The request object, includes levelId and walletAddress in the URL.
  * @param {Response} res - The response object, returning the user's inventory items.
  */
 exports.getUserInventory = (req, res) => {
     console.log("getUserInventory");
-    const { levelID, walletAddress } = req.params;
+    const { levelId, walletAddress } = req.params;
     const userInventory = userInventories.find(
         (inventory) =>
             inventory.walletAddress === walletAddress &&
-            inventory.levelID === parseInt(levelID)
+            inventory.levelId === parseInt(levelId)
     );
 
     if (userInventory) {
@@ -141,17 +143,17 @@ exports.getUserInventory = (req, res) => {
 
 /**
  * Finalizes a portal transaction after confirmation on the blockchain.
- * @param {Request} req - The request object, includes levelID and walletAddress in the URL and transaction details in the body.
+ * @param {Request} req - The request object, includes levelId and walletAddress in the URL and transaction details in the body.
  * @param {Response} res - The response object, returns whether the transaction was completed.
  */
 exports.finalizePortalTransaction = (req, res) => {
-    const { levelID, walletAddress } = req.params;
+    const { levelId, walletAddress } = req.params;
     const { extract, inject } = req.body;
 
     // Find transaction
     const transaction = transactions.find(
         (tx) =>
-            tx.walletAddress === walletAddress && tx.levelID === parseInt(levelID)
+            tx.walletAddress === walletAddress && tx.levelId === parseInt(levelId)
     );
 
     if (!transaction) {
@@ -162,7 +164,7 @@ exports.finalizePortalTransaction = (req, res) => {
     const userInventory = inventories.find(
         (inv) =>
             inv.walletAddress === walletAddress &&
-            inv.levelID === parseInt(levelID)
+            inv.levelId === parseInt(levelId)
     );
     if (userInventory) {
         // Remove extracted items

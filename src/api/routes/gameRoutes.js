@@ -10,10 +10,10 @@ router.post(
     "/assignWalletToUser/:walletAddress",
     gameController.assignWalletToUser
 );
-router.get("/getContracts/:level", gameController.getContracts);
-router.post("/getNFTMap/:levelID", gameController.getNFTMap);
+router.get("/getContracts/:levelId", gameController.getContracts);
+router.post("/getNFTMap/:levelId", gameController.getNFTMap);
 router.get(
-    "/getUserInventory/:levelID/:walletAddress",
+    "/getUserInventory/:levelId/:walletAddress",
     gameController.getUserInventory
 );
 router.put(
