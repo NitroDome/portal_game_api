@@ -8,7 +8,7 @@ app.use(express.json());
 const gameRoutes = require("./api/routes/gameRoutes");
 
 // Using routes
-app.use("/api/games", gameRoutes);
+app.use("/api/game", gameRoutes);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));

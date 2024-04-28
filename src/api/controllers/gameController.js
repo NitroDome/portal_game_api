@@ -22,6 +22,7 @@ exports.isWalletConnected = (req, res) => {
 
     // Production implementation
     // Check if the wallet is mapped to a user account in the game
+    // A wallet can be connected to only one user account in a game
 };
 
 /**
@@ -42,7 +43,9 @@ exports.assignWalletToUser = (req, res) => {
     });
 
     // Production implementation
-    // Confirm the username/password combination and assign the wallet to the user
+    // Confirm the username/password combination
+    // Confirm the wallet address is not already assigned to another user
+    // Update the database with the wallet address assigned to the user
 };
 
 /**
@@ -132,6 +135,8 @@ exports.getUserInventory = (req, res) => {
 
     // Production implementation
     // Retrieve the user's inventory for the specified level from the game database
+    // Return the mapping of item IDs to item details, including NFT information if applicable
+    // Items that have no mapping to NFTs could be returned with canExtract set to false or ignored
 };
 
 /**
