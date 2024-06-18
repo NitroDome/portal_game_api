@@ -4,6 +4,7 @@ const {
     gameContracts,
     gameNFTMappings,
 } = require("../../utils/mockData");
+const { getConnection } = require('../../services/database');
 
 /**
  * Checks if a user's wallet is connected to a specified game.
