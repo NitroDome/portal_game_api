@@ -4,7 +4,7 @@ const {
     gameContracts,
     gameNFTMappings,
 } = require("../../utils/mockData");
-const { getConnection } = require('../../services/database');
+const { getConnection } = require("../../services/database");
 
 /**
  * Checks if a user's wallet is connected to a specified game.
@@ -47,35 +47,6 @@ exports.assignWalletToUser = (req, res) => {
     // Confirm the username/password combination
     // Confirm the wallet address is not already assigned to another user
     // Update the database with the wallet address assigned to the user
-};
-
-/**
- * Retrieves contract addresses related to a specific game level that have mappings to game assets.
- * @param {Request} req - The request object. Expects levelId in the URL.
- * @param {Response} res - The response object. Returns an array of contract objects.
- */
-exports.getContracts = (req, res) => {
-    console.log("getContracts");
-    const { levelId } = req.params;
-    const levelNumber = parseInt(levelId);
-    console.log("levelNumber", levelNumber);
-    const contractsForLevel = gameContracts.find(
-        (item) => item.level === levelNumber
-    );
-
-    if (contractsForLevel) {
-        res.json(
-            contractsForLevel.contracts.map((contract) => ({
-                contract: contract.contract,
-                chain: contract.chain,
-            }))
-        );
-    } else {
-        res.status(404).json({ message: "No contracts found for this level." });
-    }
-
-    // Production implementation
-    // Retrieve contract addresses for the specified game level from the database
 };
 
 /**
@@ -154,7 +125,8 @@ exports.finalizePortalTransaction = (req, res) => {
     // Find transaction
     const transaction = transactions.find(
         (tx) =>
-            tx.walletAddress === walletAddress && tx.levelId === parseInt(levelId)
+            tx.walletAddress === walletAddress &&
+            tx.levelId === parseInt(levelId)
     );
 
     if (!transaction) {
@@ -186,4 +158,37 @@ exports.finalizePortalTransaction = (req, res) => {
     // Use the extract array to remove items from the user's inventory AND mint them as NFTs
     // NFTs should be minted and sent to the user's wallet address
     // If an NFT is escrowed, rather than burned, it should be transferred to the user's wallet address
+};
+
+/* Removes all assigned wallets for a user */
+/**
+ * Removes all assigned wallets for a user
+ * @param {Request} req - The request objec
+ * @param {Response} res - The response object, includes walletAddress, returns whether the transaction was completed.
+ */
+exports.logoutUser = async (req, res) => {
+    const { walletAddress } = req.body;
+
+    try {
+        console.log(walletAddress);
+        const result = await logoutUser(walletAddress);
+
+        if (!result) {
+            return res.status(500).json({
+                success: false,
+                error: "Failed to logout user",
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "User logged out.",
+        });
+    } catch (error) {
+        console.error("Database error:", error);
+        res.status(500).json({
+            success: false,
+            error: "Failed to logout user",
+        });
+    }
 };

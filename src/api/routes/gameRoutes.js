@@ -10,15 +10,19 @@ router.post(
     "/assignWalletToUser/:walletAddress",
     gameController.assignWalletToUser
 );
-router.get("/getContracts/:levelId", gameController.getContracts);
 router.post("/getNFTMap/:levelId", gameController.getNFTMap);
+
 router.get(
     "/getUserInventory/:levelId/:walletAddress",
     gameController.getUserInventory
 );
 router.put(
-    "/finalizePortalTransaction",
+    "/finalizePortalTransaction/:levelId/:walletAddress",
     gameController.finalizePortalTransaction
 );
+router.post(
+    "/logoutUser",
+    gameController.logoutUser
+)
 
 module.exports = router;
