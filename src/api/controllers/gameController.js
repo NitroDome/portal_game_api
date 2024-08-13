@@ -1,116 +1,312 @@
+const fs = require("fs");
 const {
-    nfts,
-    userInventories,
-    gameContracts,
-    gameNFTMappings,
-} = require("../../utils/mockData");
-const { getConnection } = require("../../services/database");
+    createPaymentLog,
+    earnPackage,
+    earnPrice,
+    extractItems,
+    findRobot,
+    getRobotIdbyUser,
+    getSeasonInfo,
+    getUserInventoryFromDB,
+    injectItems,
+    insertOrUpdateUser,
+    insertOrUpdateWallet,
+    logBookentry,
+    logCredits,
+    logoutUser,
+    userConnected,
+    validateUser,
+    walletConnected,
+} = require("../../services/database");
+const { getItemNames, parseNftType } = require("../../utils/helpers");
+
+const contractId = 0; // contractId from portal admin db
 
 /**
- * Checks if a user's wallet is connected to a specified game.
- * @param {Request} req - The request object. Expects walletAddress in the URL.
- * @param {Response} res - The response object. Returns connection status.
+ * Logs a message to a file with a timestamp.
+ * @param {string} message - The message to log.
  */
-exports.isWalletConnected = (req, res) => {
-    const { walletAddress } = req.params;
-
-    // Mock response assuming connection status
-    const isConnected = Math.random() > 0.5; // Randomly decides true or false for demonstration
-
-    res.json({
-        connected: isConnected,
-    });
-
-    // Production implementation
-    // Check if the wallet is mapped to a user account in the game
-    // A wallet can be connected to only one user account in a game
-};
+function logToFile(message) {
+    const logMessage = `[${new Date().toISOString()}] ${message}\n`;
+    fs.appendFileSync("server.log", logMessage);
+}
 
 /**
  * Assigns a user's wallet to their game account.
  * @param {Request} req - The request object. Expects walletAddress in the URL and username, password in the body.
  * @param {Response} res - The response object. Returns success status.
  */
-exports.assignWalletToUser = (req, res) => {
+exports.assignWalletToUser = async (req, res) => {
     const { walletAddress } = req.params;
-    const { username, password } = req.body; // In practice, ensure password is handled securely
+    const { username, password } = req.body;
 
-    // Here you would typically call the game API or update your database
-    console.log(`Assigning wallet ${walletAddress} to user ${username}`);
+    try {
+        const { valid, userId: gameUserId } = await validateUser(
+            username,
+            password
+        );
 
-    // Mock response assuming assignment is always successful
-    res.json({
-        success: true,
-    });
+        if (!valid) {
+            return res.status(401).json({
+                success: false,
+                error: "Invalid username or password",
+            });
+        }
 
-    // Production implementation
-    // Confirm the username/password combination
-    // Confirm the wallet address is not already assigned to another user
-    // Update the database with the wallet address assigned to the user
-};
+        const wConnected = await walletConnected(walletAddress);
 
-/**
- * Retrieves NFTs for a game level that are mapped to allowed game assets.
- * @param {Request} req - The request object, includes levelId in the URL, and expected NFT details in the body.
- * @param {Response} res - The response object, returns an array of allowed NFTs.
- */
-exports.getNFTMap = (req, res) => {
-    console.log("getNFTMap");
-    const { levelId } = req.params;
-    const nftDetails = req.body; // Array of { nftType, tokenId, contract, chain }
-    const levelNumber = parseInt(levelId);
-    const levelNFTMappings = gameNFTMappings.find(
-        (mapping) => mapping.levelId === levelNumber
-    );
+        if (wConnected) {
+            return res.status(409).json({
+                success: false,
+                error: "Wallet address already connected to another user",
+            });
+        }
 
-    if (!levelNFTMappings) {
-        return res.json([]);
-    }
-    console.log("levelNFTMappings", levelNFTMappings);
-    // Filter NFTs that match the allowed mappings and the provided details
-    const allowedNFTs = levelNFTMappings.nfts.filter((nft) =>
-        nftDetails.some(
-            (detail) =>
-                detail.tokenId === nft.tokenId &&
-                detail.contract === nft.contract &&
-                detail.chain === nft.chain &&
-                detail.nftType === nft.nftType
-        )
-    );
+        const result = await insertOrUpdateWallet(gameUserId, walletAddress);
 
-    res.json(allowedNFTs);
+        if (!result) {
+            return res.status(500).json({
+                success: false,
+                error: "Failed to assign wallet to user",
+            });
+        }
 
-    // Production implementation
-    // Use nftDetails to look up the mapping of game assets to NFTs in the database for the specified level
-    // Return the mappings that are found in the database
-};
-
-/**
- * Retrieves the user's inventory for a specific game level.
- * @param {Request} req - The request object, includes levelId and walletAddress in the URL.
- * @param {Response} res - The response object, returning the user's inventory items.
- */
-exports.getUserInventory = (req, res) => {
-    console.log("getUserInventory");
-    const { levelId, walletAddress } = req.params;
-    const userInventory = userInventories.find(
-        (inventory) =>
-            inventory.walletAddress === walletAddress &&
-            inventory.levelId === parseInt(levelId)
-    );
-
-    if (userInventory) {
-        res.json(userInventory.items);
-    } else {
-        res.status(404).json({
-            message: "No inventory found for this user and level.",
+        res.json({
+            success: true,
+            message: result.insertId
+                ? "Wallet address assigned to new user."
+                : "Wallet address updated.",
+        });
+    } catch (error) {
+        console.error("Database error:", error);
+        res.status(500).json({
+            success: false,
+            error: "Failed to assign wallet to user",
         });
     }
+};
 
-    // Production implementation
-    // Retrieve the user's inventory for the specified level from the game database
-    // Return the mapping of item IDs to item details, including NFT information if applicable
-    // Items that have no mapping to NFTs could be returned with canExtract set to false or ignored
+/**
+ * Assigns a user's NitroDome ID to their game account.
+ * @param {Request} req - The request object. Expects ndUserId in the URL and username, password in the body.
+ * @param {Response} res - The response object. Returns success status.
+ */
+exports.assignUserToUser = async (req, res) => {
+    const { ndUserId } = req.params;
+    const { username, password } = req.body;
+
+    try {
+        const { valid, userId: gameUserId } = await validateUser(
+            username,
+            password
+        );
+
+        if (!valid) {
+            return res.status(401).json({
+                success: false,
+                error: "Invalid username or password",
+            });
+        }
+
+        const wConnected = await userConnected(ndUserId);
+
+        if (wConnected) {
+            return res.status(409).json({
+                success: false,
+                error: "ndUserId already connected to another user",
+            });
+        }
+
+        const result = await insertOrUpdateUser(gameUserId, ndUserId);
+
+        if (!result) {
+            return res.status(500).json({
+                success: false,
+                error: "Failed to assign ndUserId to user",
+            });
+        }
+
+        res.json({
+            success: true,
+            message: result.insertId
+                ? "ndUserId assigned to new user."
+                : "ndUserId updated.",
+        });
+    } catch (error) {
+        console.error("Database error:", error);
+        res.status(500).json({
+            success: false,
+            error: "Failed to assign ndUserId to user",
+        });
+    }
+};
+
+/**
+ * Handles the purchase of a game pack by a user.
+ * @param {Request} req - The request object, includes levelId, userId, and packageId in the URL.
+ * @param {Response} res - The response object, returns whether the transaction was completed.
+ */
+exports.buypack = async (req, res) => {
+    const { levelId, ndUserId, packageId } = req.params;
+
+    try {
+        let eventType, amount, special;
+        switch (packageId) {
+            case "1":
+                eventType = "RoboManiac - 150 Platinum";
+                amount = 150;
+                special = null;
+                break;
+            case "2":
+                eventType = "RoboManiac - 300 Platinum";
+                amount = 300;
+                special = null;
+                break;
+            case "3":
+                eventType = "RoboManiac - 650 Platinum";
+                amount = 650;
+                special = null;
+                break;
+            case "4":
+                eventType = "RoboManiac - 1500 Platinum";
+                amount = 1500;
+                special = null;
+                break;
+            case "5":
+                eventType = "RoboManiac - 4000 Platinum";
+                amount = 4000;
+                special = null;
+                break;
+            case "6":
+                eventType = "RoboManiac - 10000 Platinum";
+                amount = 10000;
+                special = null;
+                break;
+            case "7":
+                eventType = "RoboManiac - Pro Package";
+                amount = 100;
+                special = "professional_package";
+                break;
+            default:
+                return res.status(400).json({ error: "Invalid packageId" });
+        }
+
+        const robotId = await getRobotIdbyUser(levelId, ndUserId);
+        const timestamp = Math.floor(Date.now() / 1000);
+        const logData = {
+            userId: ndUserId,
+            transaction_id: ndUserId,
+            robotId,
+            timestamp,
+            method: "portal",
+            amount,
+            special,
+            price: amount,
+            currency: "gems",
+            provider: "portal",
+            itemCode: eventType,
+            finished: 1,
+            asCode: 0,
+            language: "en",
+        };
+
+        await createPaymentLog(logData);
+        const robot = await findRobot(robotId);
+        const si = await getSeasonInfo(robot.habitat_id);
+
+        if (
+            robot.received_first_buy_bonus === 0 &&
+            ![
+                "starter_package",
+                "professional_package",
+                "halloween_package",
+            ].includes(logData.special)
+        ) {
+            await earnPrice(
+                { credits: 0, uridium: 100, platinum: 0 },
+                robot.id
+            );
+            robot.received_first_buy_bonus = 1;
+            await updateRobot(robot);
+            await logCredits(
+                robot.id,
+                24,
+                100,
+                si.fight_season,
+                si.fight_day,
+                "uridium"
+            );
+            await logBookentry(
+                robot.id,
+                si.fight_season,
+                si.fight_day,
+                "uridium",
+                24,
+                100
+            );
+        }
+
+        if (
+            [
+                "starter_package",
+                "professional_package",
+                "halloween_package",
+            ].includes(logData.special)
+        ) {
+            await earnPackage(
+                { credits: 0, uridium: 0, platinum: logData.amount },
+                robot.id
+            );
+            await logCredits(
+                robot.id,
+                48,
+                amount,
+                si.fight_season,
+                si.fight_day,
+                "platinum"
+            );
+            await logBookentry(
+                robot.id,
+                si.fight_season,
+                si.fight_day,
+                "premium_special_package",
+                48,
+                amount
+            );
+        } else {
+            await earnPrice(
+                { credits: 0, uridium: 0, platinum: logData.amount },
+                robot.id
+            );
+            await logCredits(
+                robot.id,
+                10,
+                amount,
+                si.fight_season,
+                si.fight_day,
+                "platinum"
+            );
+            await logBookentry(
+                robot.id,
+                si.fight_season,
+                si.fight_day,
+                "premium",
+                10,
+                amount
+            );
+        }
+
+        res.json({
+            success: true,
+            message: "Transaction finalized successfully",
+        });
+    } catch (error) {
+        console.error("Database error:", error);
+        res.status(500).json({
+            success: false,
+            error: "Failed to finalize transaction",
+        });
+    }
 };
 
 /**
@@ -118,59 +314,164 @@ exports.getUserInventory = (req, res) => {
  * @param {Request} req - The request object, includes levelId and walletAddress in the URL and transaction details in the body.
  * @param {Response} res - The response object, returns whether the transaction was completed.
  */
-exports.finalizePortalTransaction = (req, res) => {
+exports.finalizePortalTransaction = async (req, res) => {
     const { levelId, walletAddress } = req.params;
     const { extract, inject } = req.body;
 
-    // Find transaction
-    const transaction = transactions.find(
-        (tx) =>
-            tx.walletAddress === walletAddress &&
-            tx.levelId === parseInt(levelId)
-    );
+    const result = { extract: "false", inject: "false" };
 
-    if (!transaction) {
-        return res.status(404).json({ message: "Transaction not found." });
-    }
-
-    // Simulate inventory update
-    const userInventory = inventories.find(
-        (inv) =>
-            inv.walletAddress === walletAddress &&
-            inv.levelId === parseInt(levelId)
-    );
-    if (userInventory) {
-        // Remove extracted items
-        userInventory.items = userInventory.items.filter(
-            (item) => !extract.includes(item.itemId)
+    try {
+        console.log(
+            `Finalizing portal transaction for ${walletAddress} on level ${levelId}`,
+            extract,
+            inject
         );
 
-        // Simulate adding injected items (mock items need to be defined somewhere)
-        inject.forEach((itemId) => {
-            userInventory.items.push({ itemId, name: `New Item ${itemId}` });
+        result.extract = await extractItems(extract, walletAddress);
+        result.inject = await injectItems(levelId, walletAddress, inject);
+
+        const success = result.extract === "true" && result.inject === "true";
+
+        res.json({ success, finalized: success, ...result });
+    } catch (error) {
+        console.error("Database error:", error);
+        res.status(500).json({
+            success: false,
+            error: "Failed to finalize transaction",
         });
     }
-
-    res.json({ finalized: true });
-
-    // Production implementation
-    // Use the inject array to add new items to the user's inventory
-    // Use the extract array to remove items from the user's inventory AND mint them as NFTs
-    // NFTs should be minted and sent to the user's wallet address
-    // If an NFT is escrowed, rather than burned, it should be transferred to the user's wallet address
 };
 
-/* Removes all assigned wallets for a user */
 /**
- * Removes all assigned wallets for a user
- * @param {Request} req - The request objec
- * @param {Response} res - The response object, includes walletAddress, returns whether the transaction was completed.
+ * Retrieves NFTs for a game level that are mapped to allowed game assets.
+ * @param {Request} req - The request object, includes levelId in the URL, and expected NFT details in the body.
+ * @param {Response} res - The response object, returns an array of allowed NFTs.
+ */
+exports.getNFTMap = async (req, res) => {
+    const { levelId } = req.params;
+    const nftDetails = req.body; // Array of { contractId, tokenId, quantity, nftType }
+
+    try {
+        const itemNames = await getItemNames();
+
+        const allowedNFTsPromises = nftDetails.map(async (detail) => {
+            const { slot, itemId, level, maxLevel } = await parseNftType(
+                detail.nftType
+            );
+            return {
+                gameLevel: levelId,
+                itemId: detail.nftType,
+                name: itemNames.get(itemId) || `Item ${itemId}`,
+                description: "",
+                nftType: detail.nftType,
+                quantity: 1,
+                quantityPerNft: 1,
+                tokenId: detail.tokenId,
+                uri: "",
+                image: "",
+                contractId: detail.contractId,
+            };
+        });
+
+        const allowedNFTs = await Promise.all(allowedNFTsPromises);
+        res.json(allowedNFTs);
+    } catch (error) {
+        console.error("Error processing NFT details:", error);
+        res.status(500).json({ error: "Failed to process NFT details" });
+    }
+};
+
+/**
+ * Retrieves the user's inventory for a specific game level.
+ * @param {Request} req - The request object, includes levelId and walletAddress in the URL.
+ * @param {Response} res - The response object, returning the user's inventory items.
+ */
+exports.getUserInventory = async (req, res) => {
+    const { levelId, walletAddress } = req.params;
+    logToFile(
+        `Received request for levelId: ${levelId}, walletAddress: ${walletAddress}`
+    );
+
+    try {
+        const userInventoryFromDB = await getUserInventoryFromDB(
+            levelId,
+            walletAddress
+        );
+        logToFile(
+            `Fetched user inventory from DB: ${JSON.stringify(
+                userInventoryFromDB
+            )}`
+        );
+
+        if (!userInventoryFromDB) {
+            const message = "No inventory found for this user and level.";
+            logToFile(message);
+            return res.status(404).json({ message });
+        }
+
+        const itemNames = await getItemNames();
+        logToFile(`Fetched item names: ${JSON.stringify(itemNames)}`);
+
+        const items = userInventoryFromDB.map((item) => {
+            const itemName =
+                itemNames.get(item.item_id) || `Item ${item.item_id}`;
+            const itemData = {
+                gameLevel: levelId,
+                itemId: item.id,
+                name: itemName,
+                description: "",
+                nftType: item.nft_type,
+                quantity: 1,
+                quantityPerNft: 1,
+                uri: "",
+                image: "",
+                contractId: contractId,
+                canExtract: true,
+            };
+            logToFile(`Mapped item: ${JSON.stringify(itemData)}`);
+            return itemData;
+        });
+
+        logToFile(`Final items array: ${JSON.stringify(items)}`);
+        res.json(items);
+    } catch (error) {
+        logToFile(`Error occurred: ${error.message}`);
+        res.status(500).json({
+            message: "Failed to retrieve user inventory.",
+            error: error.message,
+        });
+    }
+};
+
+/**
+ * Checks if a user's wallet is connected to a game user account.
+ * @param {Request} req - The request object. Expects walletAddress in the URL.
+ * @param {Response} res - The response object. Returns connection status.
+ */
+exports.isWalletConnected = async (req, res) => {
+    const { walletAddress } = req.params;
+    res.json({ connected: await walletConnected(walletAddress) });
+};
+
+/**
+ * Checks if a user's NitroDome ID is connected to a game user account.
+ * @param {Request} req - The request object. Expects ndUserId in the URL.
+ * @param {Response} res - The response object. Returns connection status.
+ */
+exports.isUserConnected = async (req, res) => {
+    const { ndUserId } = req.params;
+    res.json({ connected: await userConnected(ndUserId) });
+};
+
+/**
+ * Removes all assigned wallets for a user.
+ * @param {Request} req - The request object, includes walletAddress in the body.
+ * @param {Response} res - The response object, returns whether the transaction was completed.
  */
 exports.logoutUser = async (req, res) => {
     const { walletAddress } = req.body;
 
     try {
-        console.log(walletAddress);
         const result = await logoutUser(walletAddress);
 
         if (!result) {
