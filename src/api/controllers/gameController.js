@@ -1,26 +1,24 @@
 const fs = require("fs");
 const {
-    createPaymentLog,
-    earnPackage,
-    earnPrice,
-    extractItems,
-    findRobot,
-    getRobotIdbyUser,
-    getSeasonInfo,
+    validateUser,
     getUserInventoryFromDB,
-    injectItems,
-    insertOrUpdateUser,
+    walletConnected,
     insertOrUpdateWallet,
-    logBookentry,
-    logCredits,
+    extractItems,
+    injectItems,
     logoutUser,
     userConnected,
-    validateUser,
-    walletConnected,
+    insertOrUpdateUser,
+    createPaymentLog,
+    earnPackage,
+    setItemsDeleted,
 } = require("../../services/database");
-const { getItemNames, parseNftType } = require("../../utils/helpers");
+const fs = require("fs");
 
-const contractId = 0; // contractId from portal admin db
+const { parseNftType } = require("../../utils/helpers");
+
+const metadataURL = process.env.METADATA_URL;
+const contractId = 0; // contractId from portal admin db; request from NitroDome
 
 /**
  * Logs a message to a file with a timestamp.
@@ -28,12 +26,17 @@ const contractId = 0; // contractId from portal admin db
  */
 function logToFile(message) {
     const logMessage = `[${new Date().toISOString()}] ${message}\n`;
-    fs.appendFileSync("server.log", logMessage);
+    const serverpath = process.env.SERVERPATH;
+    fs.appendFileSync(serverpath, logMessage);
 }
 
 /**
- * Assigns a user's wallet to their game account.
- * @param {Request} req - The request object. Expects walletAddress in the URL and username, password in the body.
+ * The assignWalletToUser function is designed to assign a wallet address to a
+ * user in the system. This function ensures that the user's wallet address is
+ * correctly stored and updated in the database based on the provided user ID
+ * and wallet address.
+ * @param {Request} req - The request object. Expects walletAddress in the URL
+ * and username, password in the body.
  * @param {Response} res - The response object. Returns success status.
  */
 exports.assignWalletToUser = async (req, res) => {
@@ -87,11 +90,15 @@ exports.assignWalletToUser = async (req, res) => {
 };
 
 /**
- * Assigns a user's NitroDome ID to their game account.
- * @param {Request} req - The request object. Expects ndUserId in the URL and username, password in the body.
+ * The assignNDUserToUser function is designed to assign a new or existing ND user ID
+ * to a user in the system. This function ensures that the user's ND user ID is correctly
+ * stored and updated in the database based on the provided user ID and ND user ID.
+ *
+ * @param {Request} req - The request object. Expects ndUserId in the URL and username,
+ * password in the body.
  * @param {Response} res - The response object. Returns success status.
  */
-exports.assignUserToUser = async (req, res) => {
+exports.assignNDUserToUser = async (req, res) => {
     const { ndUserId } = req.params;
     const { username, password } = req.body;
 
@@ -142,7 +149,10 @@ exports.assignUserToUser = async (req, res) => {
 };
 
 /**
- * Handles the purchase of a game pack by a user.
+ * The buypack function handles the purchase of a game pack by a user. This function processes
+ * the request to buy a specific package, logs the transaction, updates the user's inventory,
+ * and applies any relevant bonuses or special conditions.
+ *
  * @param {Request} req - The request object, includes levelId, userId, and packageId in the URL.
  * @param {Response} res - The response object, returns whether the transaction was completed.
  */
@@ -150,151 +160,50 @@ exports.buypack = async (req, res) => {
     const { levelId, ndUserId, packageId } = req.params;
 
     try {
-        let eventType, amount, special;
-        switch (packageId) {
-            case "1":
-                eventType = "RoboManiac - 150 Platinum";
-                amount = 150;
-                special = null;
-                break;
-            case "2":
-                eventType = "RoboManiac - 300 Platinum";
-                amount = 300;
-                special = null;
-                break;
-            case "3":
-                eventType = "RoboManiac - 650 Platinum";
-                amount = 650;
-                special = null;
-                break;
-            case "4":
-                eventType = "RoboManiac - 1500 Platinum";
-                amount = 1500;
-                special = null;
-                break;
-            case "5":
-                eventType = "RoboManiac - 4000 Platinum";
-                amount = 4000;
-                special = null;
-                break;
-            case "6":
-                eventType = "RoboManiac - 10000 Platinum";
-                amount = 10000;
-                special = null;
-                break;
-            case "7":
-                eventType = "RoboManiac - Pro Package";
-                amount = 100;
-                special = "professional_package";
-                break;
-            default:
-                return res.status(400).json({ error: "Invalid packageId" });
-        }
+        /*
+        
+        Determine Package Details:
 
-        const robotId = await getRobotIdbyUser(levelId, ndUserId);
-        const timestamp = Math.floor(Date.now() / 1000);
-        const logData = {
-            userId: ndUserId,
-            transaction_id: ndUserId,
-            robotId,
-            timestamp,
-            method: "portal",
-            amount,
-            special,
-            price: amount,
-            currency: "gems",
-            provider: "portal",
-            itemCode: eventType,
-            finished: 1,
-            asCode: 0,
-            language: "en",
-        };
+            Based on the packageId, determine the event type, amount, and any special conditions 
+            associated with the package.
+        
+        Validate Package ID:
 
-        await createPaymentLog(logData);
-        const robot = await findRobot(robotId);
-        const si = await getSeasonInfo(robot.habitat_id);
+            If the packageId is invalid, return a 400 status with an error message.
+        
+        Retrieve Entity ID:
 
-        if (
-            robot.received_first_buy_bonus === 0 &&
-            ![
-                "starter_package",
-                "professional_package",
-                "halloween_package",
-            ].includes(logData.special)
-        ) {
-            await earnPrice(
-                { credits: 0, uridium: 100, platinum: 0 },
-                robot.id
-            );
-            robot.received_first_buy_bonus = 1;
-            await updateRobot(robot);
-            await logCredits(
-                robot.id,
-                24,
-                100,
-                si.fight_season,
-                si.fight_day,
-                "uridium"
-            );
-            await logBookentry(
-                robot.id,
-                si.fight_season,
-                si.fight_day,
-                "uridium",
-                24,
-                100
-            );
-        }
+            Retrieve the entity ID (user/character) associated with the given levelId and 
+            ndUserId.
+        
+        Prepare Log Data:
 
-        if (
-            [
-                "starter_package",
-                "professional_package",
-                "halloween_package",
-            ].includes(logData.special)
-        ) {
-            await earnPackage(
-                { credits: 0, uridium: 0, platinum: logData.amount },
-                robot.id
-            );
-            await logCredits(
-                robot.id,
-                48,
-                amount,
-                si.fight_season,
-                si.fight_day,
-                "platinum"
-            );
-            await logBookentry(
-                robot.id,
-                si.fight_season,
-                si.fight_day,
-                "premium_special_package",
-                48,
-                amount
-            );
-        } else {
-            await earnPrice(
-                { credits: 0, uridium: 0, platinum: logData.amount },
-                robot.id
-            );
-            await logCredits(
-                robot.id,
-                10,
-                amount,
-                si.fight_season,
-                si.fight_day,
-                "platinum"
-            );
-            await logBookentry(
-                robot.id,
-                si.fight_season,
-                si.fight_day,
-                "premium",
-                10,
-                amount
-            );
-        }
+            Prepare the log data for the transaction, including user ID, transaction ID, entity ID, 
+            timestamp, method, amount, special conditions, price, currency, provider, item code, 
+            and other relevant details.
+        
+        Log the Transaction:
+
+            Call createPaymentLog to log the transaction in the database.
+        
+        Retrieve Entity Details:
+
+            Retrieve the entity details using the entity ID.
+        
+        Apply Bonuses:
+
+            Check if the user is eligible for any bonuses (e.g., first buy bonus) and apply 
+            them if applicable.
+        
+        Update Inventory:
+
+            Update the user's inventory with the purchased package.
+        
+        Send Response:
+
+            Send a response indicating whether the transaction was completed successfully.
+        
+        */
 
         res.json({
             success: true,
@@ -310,8 +219,51 @@ exports.buypack = async (req, res) => {
 };
 
 /**
- * Finalizes a portal transaction after confirmation on the blockchain.
- * @param {Request} req - The request object, includes levelId and walletAddress in the URL and transaction details in the body.
+ * The cancelPortalTransaction function is designed to handle the cancellation of a portal
+ * transaction. This function updates the transaction status in the database to reflect that
+ * it has been canceled. It ensures that the transaction is correctly marked as canceled
+ * and any necessary cleanup or rollback actions are performed
+ *
+ * @param {Request} req - The request object, includes levelId in the URL and transaction
+ * details in the body.
+ * @param {Response} res - The response object, returns whether the transaction was canceled.
+ */
+exports.cancelPortalTransaction = async (req, res) => {
+    const extract = req.body;
+
+    try {
+        /*
+
+        extract: array of item IDs to be canceled
+
+        Mark Items as Deleted:
+        
+            Call the setItemsDeleted function to update the status of the specified items 
+            in the database.
+
+        Send Response:
+        
+            Send a response indicating whether the transaction was canceled successfully.
+
+        */
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error("Database error:", error);
+        res.status(500).json({
+            success: false,
+            error: "Failed to cancel transaction",
+        });
+    }
+};
+
+/**
+ * The finalizePortalTransaction function is designed to finalize a portal transaction
+ * after confirmation on the blockchain. This function processes the extraction and injection
+ * of items for a user, ensuring that the transaction is completed successfully.
+ *
+ * @param {Request} req - The request object, includes levelId and walletAddress in the URL
+ * and transaction details in the body.
  * @param {Response} res - The response object, returns whether the transaction was completed.
  */
 exports.finalizePortalTransaction = async (req, res) => {
@@ -321,16 +273,33 @@ exports.finalizePortalTransaction = async (req, res) => {
     const result = { extract: "false", inject: "false" };
 
     try {
-        console.log(
-            `Finalizing portal transaction for ${walletAddress} on level ${levelId}`,
-            extract,
-            inject
-        );
+        /*
 
-        result.extract = await extractItems(extract, walletAddress);
-        result.inject = await injectItems(levelId, walletAddress, inject);
+        Extract Items:
 
-        const success = result.extract === "true" && result.inject === "true";
+            Call the extractItems function to handle the extraction of items from the 
+            user's inventory.
+
+            result.extract = await extractItems(walletAddress, extract);
+        
+        Inject Items:
+        
+            Call the injectItems function to handle the injection of new items into the 
+            user's inventory.
+
+            result.inject = await injectItems(walletAddress, inject);
+        
+        Determine Success:
+        
+            Check if both the extraction and injection operations were successful.
+
+            const success = result.extract && result.inject;
+        
+        Send Response:
+        
+            Send a response indicating whether the transaction was finalized successfully.
+
+        */
 
         res.json({ success, finalized: success, ...result });
     } catch (error) {
@@ -343,8 +312,12 @@ exports.finalizePortalTransaction = async (req, res) => {
 };
 
 /**
- * Retrieves NFTs for a game level that are mapped to allowed game assets.
- * @param {Request} req - The request object, includes levelId in the URL, and expected NFT details in the body.
+ * The getNFTMap function is designed to retrieve a mapping of NFTs (Non-Fungible Tokens)
+ * for a user. This function processes the provided NFT details, parses the NFT types,
+ * and returns an array of allowed NFTs with their corresponding details.
+ *
+ * @param {Request} req - The request object, includes levelId in the URL, and expected
+ * NFT details in the body.
  * @param {Response} res - The response object, returns an array of allowed NFTs.
  */
 exports.getNFTMap = async (req, res) => {
@@ -352,28 +325,43 @@ exports.getNFTMap = async (req, res) => {
     const nftDetails = req.body; // Array of { contractId, tokenId, quantity, nftType }
 
     try {
-        const itemNames = await getItemNames();
+        /*
 
-        const allowedNFTsPromises = nftDetails.map(async (detail) => {
-            const { slot, itemId, level, maxLevel } = await parseNftType(
-                detail.nftType
-            );
-            return {
-                gameLevel: levelId,
-                itemId: detail.nftType,
-                name: itemNames.get(itemId) || `Item ${itemId}`,
-                description: "",
-                nftType: detail.nftType,
-                quantity: 1,
-                quantityPerNft: 1,
-                tokenId: detail.tokenId,
-                uri: "",
-                image: "",
-                contractId: detail.contractId,
-            };
-        });
+        nftDetails: array of NFT details
+            [
+                { contractId, tokenId, quantity, nftType }, 
+            ]
 
-        const allowedNFTs = await Promise.all(allowedNFTsPromises);
+        Process Each NFT Detail:
+
+        Loop through each NFT detail in nftDetails:
+
+            Parse the NFT type using parseNftType.
+            Construct an object with the parsed details and additional information.
+        
+        Send Response:
+
+            Send a response with the array of allowed NFTs.
+
+            response: array of allowed NFTs
+                [
+                    {
+                        gameLevel,
+                        itemId,
+                        name,
+                        description,
+                        nftType,
+                        quantity,
+                        quantityPerNft,
+                        tokenId.
+                        uri,
+                        image,
+                        contractId,
+                    },
+                ]
+        
+        */
+
         res.json(allowedNFTs);
     } catch (error) {
         console.error("Error processing NFT details:", error);
@@ -382,7 +370,11 @@ exports.getNFTMap = async (req, res) => {
 };
 
 /**
- * Retrieves the user's inventory for a specific game level.
+ * The getUserInventory function is designed to retrieve the user's inventory for a
+ * specific game level. This function queries the database to fetch all inventory items
+ * associated with the given level ID and wallet address. It ensures that the system can
+ * access and return the user's inventory details.
+ *
  * @param {Request} req - The request object, includes levelId and walletAddress in the URL.
  * @param {Response} res - The response object, returning the user's inventory items.
  */
@@ -393,46 +385,35 @@ exports.getUserInventory = async (req, res) => {
     );
 
     try {
-        const userInventoryFromDB = await getUserInventoryFromDB(
-            levelId,
-            walletAddress
-        );
-        logToFile(
-            `Fetched user inventory from DB: ${JSON.stringify(
-                userInventoryFromDB
-            )}`
-        );
+        /*
+            Retrieve User Inventory:
 
-        if (!userInventoryFromDB) {
-            const message = "No inventory found for this user and level.";
-            logToFile(message);
-            return res.status(404).json({ message });
-        }
+                Call the getUserInventoryFromDB function to fetch the user's inventory
+                from the database.
+        
+            Send Response:
 
-        const itemNames = await getItemNames();
-        logToFile(`Fetched item names: ${JSON.stringify(itemNames)}`);
+                Send a response with the retrieved inventory items.
 
-        const items = userInventoryFromDB.map((item) => {
-            const itemName =
-                itemNames.get(item.item_id) || `Item ${item.item_id}`;
-            const itemData = {
-                gameLevel: levelId,
-                itemId: item.id,
-                name: itemName,
-                description: "",
-                nftType: item.nft_type,
-                quantity: 1,
-                quantityPerNft: 1,
-                uri: "",
-                image: "",
-                contractId: contractId,
-                canExtract: true,
-            };
-            logToFile(`Mapped item: ${JSON.stringify(itemData)}`);
-            return itemData;
-        });
+                response: array of inventory items
+                    [
+                        {
+                            gameLevel,
+                            itemId,
+                            name,
+                            description,
+                            nftType,
+                            quantity,
+                            quantityPerNft,
+                            uri,
+                            image,
+                            contractId,
+                            canExtract,
+                        },
+                    ]
 
-        logToFile(`Final items array: ${JSON.stringify(items)}`);
+        */
+
         res.json(items);
     } catch (error) {
         logToFile(`Error occurred: ${error.message}`);
@@ -444,7 +425,11 @@ exports.getUserInventory = async (req, res) => {
 };
 
 /**
- * Checks if a user's wallet is connected to a game user account.
+ * The isWalletConnected function is designed to check if a wallet is currently
+ * connected to the system. This function queries the database to determine if there
+ * is an active connection for the given wallet address. It ensures that the system
+ * can verify the wallet's connection status.
+ *
  * @param {Request} req - The request object. Expects walletAddress in the URL.
  * @param {Response} res - The response object. Returns connection status.
  */
@@ -454,7 +439,11 @@ exports.isWalletConnected = async (req, res) => {
 };
 
 /**
- * Checks if a user's NitroDome ID is connected to a game user account.
+ * The isUserConnected function is designed to check if a user is currently connected
+ * to the system. This function queries the database to determine if there is an
+ * active session or connection for the given user ID. It ensures that the system can
+ * verify the user's connection status.
+ *
  * @param {Request} req - The request object. Expects ndUserId in the URL.
  * @param {Response} res - The response object. Returns connection status.
  */
@@ -464,7 +453,11 @@ exports.isUserConnected = async (req, res) => {
 };
 
 /**
- * Removes all assigned wallets for a user.
+ * The logoutUser function is designed to handle the process of logging out a user from
+ * the system. This function deletes the user's session or related data from the database
+ * based on their user ID. It ensures that the user's session is properly terminated and
+ * their data is removed from the active sessions.
+ *
  * @param {Request} req - The request object, includes walletAddress in the body.
  * @param {Response} res - The response object, returns whether the transaction was completed.
  */
@@ -490,6 +483,54 @@ exports.logoutUser = async (req, res) => {
         res.status(500).json({
             success: false,
             error: "Failed to logout user",
+        });
+    }
+};
+
+/**
+ * The submitPortalTransaction function is designed to handle the submission of a portal
+ * transaction. This function processes the transaction details, logs the transaction,
+ * and updates the user's inventory accordingly. It ensures that the transaction is
+ * correctly recorded and the user's inventory is updated.
+ *
+ * @param {Request} req - The request object, includes levelId and walletAddress in the
+ * URL and extract details in the body.
+ * @param {Response} res - The response object, returns whether the extractable items are confirmed.
+ */
+exports.submitPortalTransaction = async (req, res) => {
+    const { levelId, walletAddress } = req.params;
+    const extract = req.body;
+
+    try {
+        logToFile(
+            `Submitting portal transaction for ${walletAddress} on level ${levelId}`,
+            extract
+        );
+
+        // confirm the extract items are available in the user's inventory
+        const userInventoryFromDB = await getUserInventoryFromDB(walletAddress);
+
+        const missingItems = extract.filter(
+            (itemId) => !userInventoryFromDB.some((item) => item.Id === itemId)
+        );
+
+        if (missingItems.length > 0) {
+            return res.status(404).json({
+                success: false,
+                error: "Items not found in user's inventory",
+                missingItems,
+            });
+        }
+
+        // set the items as deleted = true in the database
+        await setItemsDeleted(extract, true);
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error("Database error:", error);
+        res.status(500).json({
+            success: false,
+            error: "Failed to confirm extractable items",
         });
     }
 };
