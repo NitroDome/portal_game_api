@@ -3,7 +3,7 @@ const mysql = require("mysql2/promise");
 const bcrypt = require("bcrypt");
 const { nftcontract } = require("../config/config");
 const { parseNftType, generateNftType } = require("../utils/helpers");
-const portalABI = require("../utils/portalABI.json");
+//const portalABI = require("../utils/portalABI.json");
 const { ethers } = require("ethers");
 const pool = require("./pool");
 const CryptoJS = require("crypto-js");
@@ -23,10 +23,10 @@ if (!ethers.providers) {
     logToFile("Ethers providers loaded successfully.");
 }
 
-const provider = new ethers.providers.JsonRpcProvider(process.env.RPC);
-const contract = new ethers.Contract(nftcontract, portalABI, provider);
-const privateKey = process.env.PRIVATE_KEY;
-const signer = new Wallet(privateKey, provider);
+//const provider = new ethers.providers.JsonRpcProvider(process.env.RPC);
+//const contract = new ethers.Contract(nftcontract, portalABI, provider);
+//const privateKey = process.env.PRIVATE_KEY;
+//const signer = new Wallet(privateKey, provider);
 
 async function getNonce() {
     // Fetch the current nonce for the backend wallet
